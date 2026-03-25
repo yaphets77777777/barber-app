@@ -1,0 +1,281 @@
+<%- include('partials/header') %>
+
+<div class="barber-profile">
+    <div class="barber-avatar">
+        <img src="<%= barber.avatar %>" alt="<%= barber.name %>">
+    </div>
+    <div class="barber-info">
+        <h2><%= barber.name %></h2>
+        <p><%= barber.description %></p>
+    </div>
+</div>
+
+<div class="services">
+    <h3>Наши услуги</h3>
+    <div class="services-grid">
+        <% services.forEach(service => { %>
+        <div class="service-card" data-service-id="<%= service._id %>" data-service-price="<%= service.price %>">
+            <h4><%= service.name %></h4>
+            <p class="price"><%= service.price %> ₽</p>
+            <p class="duration"><%= service.duration %> мин</p>
+        </div>
+        <% }) %>
+    </div>
+</div>
+
+<div class="booking-form">
+    <h3>Записаться онлайн</h3>
+    <form id="bookingForm">
+        <input type="hidden" id="barberId" value="<%= barber._id %>">
+        
+        <div class="form-group">
+            <label for="serviceId">Выберите услугу:</label>
+            <select id="serviceId" required>
+                <option value="">-- Выберите услугу --</option>
+                <% services.forEach(service => { %>
+                <option value="<%= service._id %>"><%= service.name %> - <%= service.price %> ₽</option>
+                <% }) %>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="clientName">Ваше имя:</label>
+            <input type="text" id="clientName" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="phone">Телефон:</label>
+            <input type="tel" id="phone" placeholder="+7 (XXX) XXX-XX-XX" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="date">Дата:</label>
+            <input type="date" id="date" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="time">Время:</label>
+            <select id="time" required disabled>
+                <option value="">Сначала выберите дату</option>
+            </select>
+        </div>
+        
+        <button type="submit" class="btn">Записаться</button>
+    </form>
+    <div id="message"></div>
+    <!-- Раздел с отзывами -->
+<div class="reviews-section">
+    <h3>Отзывы клиентов</h3>
+    
+    <!-- Форма добавления отзыва -->
+    <div class="review-form">
+        <h4>Оставьте свой отзыв</h4>
+        <form id="reviewForm">
+            <input type="hidden" id="reviewBarberId" value="<%= barber._id %>">
+            
+            <div class="form-group">
+                <label for="reviewClientName">Ваше имя:</label>
+                <input type="text" id="reviewClientName" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reviewRating">Оценка:</label>
+                <select id="reviewRating" required>
+                    <option value="">Выберите оценку</option>
+                    <option value="5">⭐⭐⭐⭐⭐ - Отлично</option>
+                    <option value="4">⭐⭐⭐⭐ - Хорошо</option>
+                    <option value="3">⭐⭐⭐ - Нормально</option>
+                    <option value="2">⭐⭐ - Плохо</option>
+                    <option value="1">⭐ - Ужасно</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="reviewComment">Ваш отзыв:</label>
+                <textarea id="reviewComment" rows="3" required></textarea>
+            </div>
+            
+            <button type="submit" class="btn">Отправить отзыв</button>
+        </form>
+        <div id="reviewMessage"></div>
+    </div>
+    
+    <!-- Список отзывов -->
+    <div id="reviewsList" class="reviews-list">
+        <div class="loading">Загрузка отзывов...</div>
+    </div>
+</div>
+
+<script>
+// Функция загрузки отзывов
+async function loadReviews() {
+    const barberId = document.getElementById('reviewBarberId').value;
+    const reviewsList = document.getElementById('reviewsList');
+    
+    try {
+        const response = await fetch(`/api/reviews/${barberId}`);
+        const reviews = await response.json();
+        
+        if (reviews.length === 0) {
+            reviewsList.innerHTML = '<div class="no-reviews">Пока нет отзывов. Будьте первым!</div>';
+            return;
+        }
+        
+        reviewsList.innerHTML = reviews.map(review => `
+            <div class="review-card">
+                <div class="review-header">
+                    <strong>${escapeHtml(review.clientName)}</strong>
+                    <div class="review-rating">${'⭐'.repeat(review.rating)}${'☆'.repeat(5-review.rating)}</div>
+                </div>
+                <div class="review-date">${new Date(review.createdAt).toLocaleDateString('ru-RU')}</div>
+                <p class="review-comment">${escapeHtml(review.comment)}</p>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Ошибка загрузки отзывов:', error);
+        reviewsList.innerHTML = '<div class="error">Ошибка загрузки отзывов</div>';
+    }
+}
+
+// Функция для экранирования HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Обработка отправки отзыва
+document.getElementById('reviewForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const reviewData = {
+        barberId: document.getElementById('reviewBarberId').value,
+        clientName: document.getElementById('reviewClientName').value,
+        rating: parseInt(document.getElementById('reviewRating').value),
+        comment: document.getElementById('reviewComment').value
+    };
+    
+    if (!reviewData.clientName || !reviewData.rating || !reviewData.comment) {
+        document.getElementById('reviewMessage').innerHTML = '<div class="error">Заполните все поля</div>';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/reviews', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(reviewData)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            document.getElementById('reviewMessage').innerHTML = '<div class="success">✅ Спасибо за отзыв!</div>';
+            document.getElementById('reviewForm').reset();
+            loadReviews(); // Перезагружаем список отзывов
+        } else {
+            document.getElementById('reviewMessage').innerHTML = `<div class="error">❌ ${result.error}</div>`;
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        document.getElementById('reviewMessage').innerHTML = '<div class="error">Ошибка при отправке отзыва</div>';
+    }
+});
+
+// Загружаем отзывы при загрузке страницы
+loadReviews();
+</script>
+
+</div>
+
+<script>
+const dateInput = document.getElementById('date');
+const timeSelect = document.getElementById('time');
+const barberId = document.getElementById('barberId').value;
+const serviceSelect = document.getElementById('serviceId');
+const clientNameInput = document.getElementById('clientName');
+const phoneInput = document.getElementById('phone');
+const bookingForm = document.getElementById('bookingForm');
+const messageDiv = document.getElementById('message');
+
+// Устанавливаем минимальную дату (сегодня)
+const today = new Date().toISOString().split('T')[0];
+dateInput.min = today;
+
+// Загрузка свободных слотов при выборе даты
+dateInput.addEventListener('change', async () => {
+    const date = dateInput.value;
+    if (!date) return;
+    
+    timeSelect.disabled = true;
+    timeSelect.innerHTML = '<option>Загрузка...</option>';
+    
+    try {
+        const response = await fetch(`/api/slots/${barberId}/${date}`);
+        const data = await response.json();
+        
+        if (data.availableSlots.length === 0) {
+            timeSelect.innerHTML = '<option>Нет свободных слотов</option>';
+        } else {
+            timeSelect.innerHTML = '<option value="">Выберите время</option>' +
+                data.availableSlots.map(slot => `<option value="${slot}">${slot}</option>`).join('');
+            timeSelect.disabled = false;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки слотов:', error);
+        timeSelect.innerHTML = '<option>Ошибка загрузки</option>';
+    }
+});
+
+// Обработка отправки формы
+bookingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const bookingData = {
+        barberId: barberId,
+        serviceId: serviceSelect.value,
+        clientName: clientNameInput.value,
+        phone: phoneInput.value,
+        date: dateInput.value,
+        time: timeSelect.value
+    };
+    
+    // Валидация
+    if (!bookingData.serviceId || !bookingData.clientName || !bookingData.phone || !bookingData.date || !bookingData.time) {
+        messageDiv.innerHTML = '<div class="error">Заполните все поля</div>';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/bookings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bookingData)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            messageDiv.innerHTML = '<div class="success">✅ Запись успешно создана!</div>';
+            bookingForm.reset();
+            timeSelect.disabled = true;
+            timeSelect.innerHTML = '<option>Сначала выберите дату</option>';
+            // Перезагружаем слоты для текущей даты
+            if (dateInput.value) {
+                dateInput.dispatchEvent(new Event('change'));
+            }
+        } else {
+            messageDiv.innerHTML = `<div class="error">❌ ${result.error}</div>`;
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        messageDiv.innerHTML = '<div class="error">Ошибка при отправке</div>';
+    }
+});
+</script>
+
+<%- include('partials/footer') %>
